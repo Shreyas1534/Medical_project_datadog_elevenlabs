@@ -3,21 +3,21 @@ uvicorn==0.29.0
 requests==2.31.0
 python-dotenv==1.0.1
 
-# AI & API Clients
+# AI Clients
 groq==1.0.0
 elevenlabs==0.2.26
 google-generativeai==0.5.2
 protobuf==3.20.*
 
-# Stable Pydantic (no Rust compilation)
-pydantic==2.4.2
+# SAFE – No Rust required
+pydantic==1.10.13
 
-# Google API Compatibility
+# Google API support
 google-api-core==2.11.1
 google-auth==2.22.0
 google-api-python-client==2.90.0
 
-# Networking & dependency stability
+# Networking stability
 httpx==0.24.1
 httpcore==0.17.3
 rfc3986==1.5.0
