@@ -9,16 +9,15 @@ elevenlabs==0.2.26
 google-generativeai==0.5.2
 protobuf==3.20.*
 
-# Stable Pydantic version (NO Rust build required)
+# Stable Pydantic (no Rust compilation)
 pydantic==2.4.2
-pydantic-core==2.10.1
 
 # Google API Compatibility
 google-api-core==2.11.1
 google-auth==2.22.0
 google-api-python-client==2.90.0
 
-# Networking & dependency stability (prevents freeze)
+# Networking & dependency stability
 httpx==0.24.1
 httpcore==0.17.3
 rfc3986==1.5.0
