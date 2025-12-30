@@ -60,41 +60,54 @@ def extract_json(text):
     match = re.search(r"\{[\s\S]*\}", text)
     return json.loads(match.group()) if match else {"error":"No JSON returned"}
 
-# ---------------- GROQ Report Generation (FIXED) ----------------
+# ---------------- GROQ Report Generation (FIXED – NO FORMAT ERROR) ----------------
 def generate_llm_report(prediction, confidence):
 
+    confidence_value = f"{confidence*100:.2f}%"  # safe formatting outside the f-string
+
     prompt = f"""
-You are a licensed medical diagnostic assistant.
-Generate a detailed clinical report from this information:
+You are a licensed medical diagnostic AI.
+Generate a detailed clinical medical report based on this:
 
 Diagnosis: {prediction}
-Model Confidence: {confidence*100:.2f}%
+Confidence: {confidence_value}
 
-Return ONLY valid JSON:
-{
+Return ONLY VALID JSON. Do not include explanations or markdown.
+Use this JSON structure:
+
+{{
   "disease": "{prediction}",
-  "confidence_score": "{confidence*100:.2f}%",
-  "severity_assessment": "Low/Moderate/High",
-  "detailed_explanation": "Medical explanation in 3-5 sentences.",
-  "possible_symptoms": ["symptom 1", "symptom 2"],
-  "clinical_significance": "Explain why this matters medically.",
-  "recommended_next_steps": ["test 1","specialist","treatment suggestion"],
-  "specialist_to_consult": "Which doctor?",
-  "emergency_signs": ["when to go to ER"],
-  "disclaimer": "AI assistance only - not a medical diagnosis."
-}
+  "confidence_score": "{confidence_value}",
+  "severity_assessment": "Low / Moderate / High",
+  "detailed_explanation": "Brief medical explanation in 3-5 sentences.",
+  "possible_symptoms": ["symptom 1", "symptom 2", "symptom 3"],
+  "clinical_significance": "Why this condition matters.",
+  "recommended_next_steps": [
+      "Test to take",
+      "Doctor to consult",
+      "Immediate care guidance"
+  ],
+  "specialist_to_consult": "Which doctor to meet?",
+  "emergency_signs": [
+      "red flag symptoms",
+      "when to visit ER"
+  ],
+  "patient_friendly_summary": "Explain in normal language.",
+  "disclaimer": "This is AI-generated medical assistance, not a confirmed diagnosis."
+}}
 """
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
-            {"role":"system","content":"Respond ONLY in JSON. No extra text."},
-            {"role":"user","content":prompt}
+            {"role": "system", "content": "Respond ONLY using JSON. No extra words."},
+            {"role": "user", "content": prompt}
         ],
-        extra_body={"temperature": 0.3}   # <-- FIX
+        extra_body={"temperature": 0.3}
     )
 
     return extract_json(response.choices[0].message.content)
+
 
 
 # ----------------------------------------
