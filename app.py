@@ -117,7 +117,6 @@ def gemini_summary(report):
 # ----------------------------------------
 def generate_voice(report):
     try:
-        # Ensure fields are lists
         symptoms = report.get("possible_symptoms", [])
         if isinstance(symptoms, str): symptoms = [symptoms]
 
@@ -129,16 +128,16 @@ def generate_voice(report):
         f"Confidence score: {report['confidence_score']}. "
         f"Symptoms may include: {', '.join(symptoms)}. "
         f"Recommended next steps: {', '.join(steps)}. "
-        f"Please consult a specialist for confirmation."
+        f"Please consult a medical specialist for confirmation."
         )
 
         audio = generate(
             text=text,
-            voice="Rachel",
-            model="eleven_multilingual_v2"  # ❗No voice_settings needed
+            voice="Bella",                 # ← FIXED
+            model="eleven_multilingual_v2"
         )
 
-        with open("doctor_report.mp3", "wb") as f:
+        with open("doctor_report.mp3","wb") as f:
             f.write(audio)
 
         print("🎤 Voice note generated successfully!")
@@ -147,6 +146,7 @@ def generate_voice(report):
     except Exception as e:
         print("🚨 ElevenLabs Voice Error:", e)
         return None
+
 
 
 
