@@ -117,9 +117,14 @@ def gemini_summary(report):
 # ----------------------------------------
 def generate_voice(report):
     try:
-        # Ensure list fields are ALWAYS lists
+        # Ensure field naming issues don't break audio generation
+        confidence_score = report.get("confidence_score") or \
+                           report.get("ai_confidence_score") or \
+                           report.get("confidence") or "Not provided"
+
+        # Ensure symptom/steps are lists
         symptoms = report.get("possible_symptoms", [])
-        if isinstance(symptoms, str):
+        if isinstance(symptoms, str): 
             symptoms = [symptoms]
 
         steps = report.get("recommended_next_steps", [])
@@ -127,32 +132,31 @@ def generate_voice(report):
             steps = [steps]
 
         text = (
-        f"Medical update: The detected condition is {report['disease']}. "
-        f"The confidence score is {report['confidence_score']}. "
-        f"Key symptoms to watch for include: {', '.join(symptoms)}. "
-        f"Next medical steps we recommend are: {', '.join(steps)}. "
-        f"Please consult a specialist for a confirmed diagnosis."
+            f"Medical report summary. The detected condition is {report.get('disease', 'not provided')}. "
+            f"The confidence score is {confidence_score}. "
+            f"Key symptoms may include: {', '.join(symptoms)}. "
+            f"Recommended next steps include: {', '.join(steps)}. "
+            f"Please consult a medical specialist for official diagnosis and treatment."
         )
 
         audio = generate(
             text=text,
             voice="Rachel",
             model="eleven_multilingual_v2",
-            voice_settings=VoiceSettings(
-                stability=0.55,
-                similarity_boost=0.85
-            ),
+            voice_settings=VoiceSettings(stability=0.55, similarity_boost=0.85),
             output_format="mp3"
         )
 
-        with open("doctor_report.mp3","wb") as f:
+        with open("doctor_report.mp3", "wb") as f:
             f.write(audio)
 
+        print("✅ ElevenLabs audio generated successfully")
         return "doctor_report.mp3"
 
     except Exception as e:
-        print("⚠️ ElevenLabs Error:", e)
+        print("🚨 ElevenLabs ERROR:", e)
         return None
+
 
 # ----------------------------------------
 # ROUTES
