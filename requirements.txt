@@ -8,10 +8,9 @@ elevenlabs==0.2.26
 google-generativeai==0.5.2
 protobuf==3.20.*
 
-# 🔥 This version has prebuilt wheels (NO Rust)
-pydantic==2.7.4
-
-# ❌ REMOVE pydantic-core (do not include it)
+# Pydantic + core versions that HAVE wheels on Python 3.10 (no Rust build!)
+pydantic==2.4.2
+pydantic-core==2.10.1
 
 google-api-core==2.11.1
 google-auth==2.22.0
