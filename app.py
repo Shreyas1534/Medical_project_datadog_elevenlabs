@@ -31,8 +31,7 @@ def dd_metric(name, value=1, metric_type="count"):
     try:
         url = f"https://api.{DD_SITE}/api/v1/series?api_key={DATADOG_API_KEY}&application_key={DATADOG_APP_KEY}"
         payload = {
-            "series":[{ 
-                "metric": name, "type": metric_type,
+            "series":[{ "metric": name, "type": metric_type,
                 "points":[[int(time.time()), value]],
                 "tags":["service:medical_ai", "env:prod"]
             }]
@@ -54,7 +53,6 @@ gemini_model = genai.GenerativeModel(
 
 BACKEND_MODEL_URL = "https://medical-project-api.onrender.com/predict"
 
-
 # ----------------------------------------
 # Helpers
 # ----------------------------------------
@@ -62,39 +60,38 @@ def extract_json(text):
     match = re.search(r"\{[\s\S]*\}", text)
     return json.loads(match.group()) if match else {"error":"No JSON returned"}
 
-# ---------------- GROQ Report Generation ----------------
+# ---------------- GROQ Report Generation (FIXED) ----------------
 def generate_llm_report(prediction, confidence):
 
-    confidence_value = f"{confidence*100:.2f}%"
-
     prompt = f"""
-You are a licensed clinical medical diagnostic AI.
+You are a licensed medical diagnostic assistant.
+Generate a detailed clinical report from this information:
+
 Diagnosis: {prediction}
-Confidence: {confidence_value}
+Model Confidence: {confidence*100:.2f}%
 
-Return ONLY JSON (no markdown, no extra text):
-
-{{
+Return ONLY valid JSON:
+{
   "disease": "{prediction}",
-  "confidence_score": "{confidence_value}",
-  "severity_assessment": "Low / Moderate / High",
-  "detailed_explanation": "Brief medical explanation.",
-  "possible_symptoms": ["symptom 1", "symptom 2", "symptom 3"],
-  "clinical_significance": "Why condition matters",
-  "recommended_next_steps": ["Step 1", "Step 2", "Step 3"],
-  "specialist_to_consult": "Doctor name",
-  "emergency_signs": ["critical sign 1", "critical sign 2"],
-  "patient_friendly_summary": "Simplified explanation.",
-  "disclaimer": "AI-generated, not a final diagnosis."
-}}
+  "confidence_score": "{confidence*100:.2f}%",
+  "severity_assessment": "Low/Moderate/High",
+  "detailed_explanation": "Medical explanation in 3-5 sentences.",
+  "possible_symptoms": ["symptom 1", "symptom 2"],
+  "clinical_significance": "Explain why this matters medically.",
+  "recommended_next_steps": ["test 1","specialist","treatment suggestion"],
+  "specialist_to_consult": "Which doctor?",
+  "emergency_signs": ["when to go to ER"],
+  "disclaimer": "AI assistance only - not a medical diagnosis."
+}
 """
+
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
-            {"role":"system","content":"Return ONLY JSON."},
+            {"role":"system","content":"Respond ONLY in JSON. No extra text."},
             {"role":"user","content":prompt}
         ],
-        extra_body={"temperature": 0.3}
+        extra_body={"temperature": 0.3}   # <-- FIX
     )
 
     return extract_json(response.choices[0].message.content)
@@ -106,31 +103,18 @@ Return ONLY JSON (no markdown, no extra text):
 def gemini_summary(report):
     try:
         result = gemini_model.generate_content(
-            "Explain simply for a normal patient: " + json.dumps(report)
+            "Make this easier to understand for a normal patient: " + json.dumps(report)
         )
         return result.text
     except:
         return "⚠️ Gemini unavailable."
 
-
 # ----------------------------------------
-# ElevenLabs - IMPROVED VOICE OUTPUT
+# ElevenLabs - Audio Summary
 # ----------------------------------------
 def generate_voice(report):
     try:
-        disease = report.get("disease", "Unknown condition")
-        confidence = report.get("confidence_score", "N/A")
-        symptoms = ", ".join(report.get("possible_symptoms", [])[:3])  # first 3
-        next_steps = ", ".join(report.get("recommended_next_steps", [])[:3])  # first 3
-
-        text = f"""
-Medical alert. The detected condition is {disease}.
-Confidence score: {confidence}.
-Possible symptoms include: {symptoms}.
-Recommended next steps: {next_steps}.
-Please consult a medical professional for further evaluation.
-"""
-
+        text = f"The system detected {report['disease']} with {report['ai_confidence_score']} confidence."
         audio = generate(
             text=text,
             voice="Rachel",
@@ -138,15 +122,12 @@ Please consult a medical professional for further evaluation.
             voice_settings=VoiceSettings(stability=0.55, similarity_boost=0.85),
             output_format="mp3"
         )
-
         with open("doctor_report.mp3","wb") as f:
             f.write(audio)
-
         return "doctor_report.mp3"
     except Exception as e:
         print("⚠️ ElevenLabs Error:", e)
         return None
-
 
 # ----------------------------------------
 # ROUTES
@@ -180,7 +161,6 @@ async def diagnose(file: UploadFile = File(...)):
     except Exception as e:
         dd_metric("medical_ai.error")
         raise HTTPException(500, f"SERVER ERROR: {str(e)}")
-
 
 @app.get("/voice-report")
 def voice_report():
