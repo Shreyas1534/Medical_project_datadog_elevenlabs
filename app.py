@@ -112,20 +112,36 @@ def gemini_summary(report):
 # ----------------------------------------
 # ElevenLabs - Audio Summary
 # ----------------------------------------
+# ----------------------------------------
+# ElevenLabs - Audio Summary (FIXED & DYNAMIC)
+# ----------------------------------------
 def generate_voice(report):
     try:
+        # Ensure list fields are ALWAYS lists
+        symptoms = report.get("possible_symptoms", [])
+        if isinstance(symptoms, str):
+            symptoms = [symptoms]
+
+        steps = report.get("recommended_next_steps", [])
+        if isinstance(steps, str):
+            steps = [steps]
+
         text = (
-        f"Detected condition: {report['disease']}. "
-        f"Confidence score: {report['confidence_score']}. "
-        f"Possible symptoms include: {', '.join(report['possible_symptoms'])}. "
-        f"Recommended next steps: {', '.join(report['recommended_next_steps'])}."
+        f"Medical update: The detected condition is {report['disease']}. "
+        f"The confidence score is {report['confidence_score']}. "
+        f"Key symptoms to watch for include: {', '.join(symptoms)}. "
+        f"Next medical steps we recommend are: {', '.join(steps)}. "
+        f"Please consult a specialist for a confirmed diagnosis."
         )
 
         audio = generate(
             text=text,
             voice="Rachel",
             model="eleven_multilingual_v2",
-            voice_settings=VoiceSettings(stability=0.55, similarity_boost=0.85),
+            voice_settings=VoiceSettings(
+                stability=0.55,
+                similarity_boost=0.85
+            ),
             output_format="mp3"
         )
 
@@ -133,7 +149,7 @@ def generate_voice(report):
             f.write(audio)
 
         return "doctor_report.mp3"
-        
+
     except Exception as e:
         print("⚠️ ElevenLabs Error:", e)
         return None
