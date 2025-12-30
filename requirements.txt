@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+requests
+python-dotenv
+groq
+elevenlabs==1.0.0
+google-generativeai
+protobuf==3.20.*
+pydantic
