@@ -8,12 +8,12 @@ groq==1.0.0
 elevenlabs==0.2.26
 google-generativeai==0.5.2
 
-# Compatibility (prevents Rust / cargo errors on Railway)
+# Compatibility / Prevent rust build failures
 protobuf==3.20.*
 pydantic==2.4.2
 pydantic-core==2.10.1
 
-# Google API (Safe & Stable)
+# Google API
 google-api-core==2.11.1
 google-auth==2.22.0
 google-api-python-client==2.90.0
@@ -27,5 +27,5 @@ rfc3986==1.5.0
 # Build Tools
 setuptools==68.2.2
 
-# REQUIRED for UploadFile in FastAPI 🚑🔥
-python-multipart==0.0.6
+# REQUIRED for file upload (fixes your error 🚑)
+python-multipart==0.0.7
