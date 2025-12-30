@@ -60,38 +60,38 @@ def extract_json(text):
     match = re.search(r"\{[\s\S]*\}", text)
     return json.loads(match.group()) if match else {"error":"No JSON returned"}
 
-# ---------------- GROQ Report Generation (FIXED) ----------------
+# ---------------- REAL GROQ MEDICAL REPORT ----------------
 def generate_llm_report(prediction, confidence):
 
+    confidence_score = f"{confidence*100:.2f}%"  # safe formatting
+
     prompt = f"""
-You are a licensed medical diagnostic assistant.
-Generate a detailed clinical report from this information:
+You are a licensed medical diagnostic AI. Analyze the detected condition and generate a medically accurate clinical report.
 
-Diagnosis: {prediction}
-Model Confidence: {confidence*100:.2f}%
+Detected diagnosis: {prediction}
+Model confidence: {confidence_score}
 
-Return ONLY valid JSON:
-{
+Return ONLY JSON. NO notes or markdown.
+
+{{
   "disease": "{prediction}",
-  "confidence_score": "{confidence*100:.2f}%",
-  "severity_assessment": "Low/Moderate/High",
-  "detailed_explanation": "Medical explanation in 3-5 sentences.",
-  "possible_symptoms": ["symptom 1", "symptom 2"],
-  "clinical_significance": "Explain why this matters medically.",
-  "recommended_next_steps": ["test 1","specialist","treatment suggestion"],
-  "specialist_to_consult": "Which doctor?",
-  "emergency_signs": ["when to go to ER"],
-  "disclaimer": "AI assistance only - not a medical diagnosis."
-}
-"""
+  "confidence_score": "{confidence_score}",
+  "severity_assessment": "Assess condition as Low, Moderate, or High -- based on medical likelihood.",
+  "detailed_explanation": "Explain this condition in 3-6 sentences using real medical context.",
+  "possible_symptoms": "List 5-8 realistic symptoms linked to this condition.",
+  "clinical_significance": "Medical impact, why this matters, what may happen without treatment.",
+  "recommended_next_steps": "3-6 next steps including diagnostic tests or treatment guidance.",
+  "specialist_to_consult": "Name relevant doctor like Neurologist/Oncologist/Endocrinologist.",
+  "emergency_signs": "List 3-5 red flag symptoms requiring urgent ER care.",
+  "patient_friendly_summary": "Explain clearly as if speaking to a non-medical person.",
+  "disclaimer": "This is AI-generated medical assistance, not a confirmed diagnosis."
+}}
+    """
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
-        messages=[
-            {"role":"system","content":"Respond ONLY in JSON. No extra text."},
-            {"role":"user","content":prompt}
-        ],
-        extra_body={"temperature": 0.3}   # <-- FIX
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.4
     )
 
     return extract_json(response.choices[0].message.content)
@@ -114,7 +114,13 @@ def gemini_summary(report):
 # ----------------------------------------
 def generate_voice(report):
     try:
-        text = f"The system detected {report['disease']} with {report['ai_confidence_score']} confidence."
+        text = (
+        f"Detected condition: {report['disease']}. "
+        f"Confidence score: {report['confidence_score']}. "
+        f"Possible symptoms include: {', '.join(report['possible_symptoms'])}. "
+        f"Recommended next steps: {', '.join(report['recommended_next_steps'])}."
+        )
+
         audio = generate(
             text=text,
             voice="Rachel",
@@ -122,9 +128,12 @@ def generate_voice(report):
             voice_settings=VoiceSettings(stability=0.55, similarity_boost=0.85),
             output_format="mp3"
         )
+
         with open("doctor_report.mp3","wb") as f:
             f.write(audio)
+
         return "doctor_report.mp3"
+        
     except Exception as e:
         print("⚠️ ElevenLabs Error:", e)
         return None
