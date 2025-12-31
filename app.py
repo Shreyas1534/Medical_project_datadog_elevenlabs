@@ -122,29 +122,32 @@ def gemini_summary(report):
 
 
 # ----------------------------------------
-# 🎙️ ElevenLabs Voice Report Generation
+# 🎙️ ElevenLabs Voice Report Generation (FIXED - SINGLE VOICE)
 # ----------------------------------------
 def generate_voice(report):
     try:
         text = (
             f"Detected condition: {report['disease']}. "
-            f"Confidence: {report['confidence_score']}. "
-            f"{report['patient_friendly_summary']}"
+            f"Confidence score: {report['confidence_score']}. "
+            f"{report.get('patient_friendly_summary','')}"
         )
 
+        # 🔥 Using ONLY "Alice" (confirmed available)
         audio = generate(
             text=text,
-            voice="Bella",
+            voice="Alice",
             model="eleven_multilingual_v2"
         )
 
         with open("doctor_report.mp3", "wb") as f:
             f.write(audio)
 
+        print("🎤 Voice generated using: Alice")
         return "doctor_report.mp3"
+
     except Exception as e:
         dd_metric("medical_ai.voice.error")
-        print("🚨 Voice Error:", e)
+        print("🚨 ElevenLabs Voice Error:", e)
         return None
 
 
