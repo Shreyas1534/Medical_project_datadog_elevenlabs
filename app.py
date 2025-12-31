@@ -4,7 +4,7 @@ import requests, json, os, re, time
 from groq import Groq
 from dotenv import load_dotenv
 import google.generativeai as genai
-from elevenlabs import ElevenLabs  # UPDATED SDK
+from elevenlabs.client import ElevenLabs   # ✅ Correct import for your version
 
 # ----------------------------------------
 # Load Environment Variables
@@ -20,9 +20,9 @@ DATADOG_API_KEY = os.getenv("DATADOG_API_KEY")
 DATADOG_APP_KEY = os.getenv("DATADOG_APP_KEY")
 DD_SITE = os.getenv("DD_SITE", "us5.datadoghq.com")
 
-# Initialize ElevenLabs Client (NEW METHOD)
+# Initialize ElevenLabs Client
 ELEVEN_CLIENT = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-ALICE_VOICE_ID = "Xb7hH8MSUJpSbSDYk0k2"  # <<--- Alice ID
+ALICE_VOICE_ID = "Xb7hH8MSUJpSbSDYk0k2"  # 🎙️ Confirmed working voice ID
 
 # Groq Client
 client = Groq(api_key=GROQ_API_KEY)
@@ -34,18 +34,18 @@ gemini_model = genai.GenerativeModel(
     generation_config={"temperature": 0.2, "max_output_tokens": 200}
 )
 
-# Backend ML Model Endpoint
+# Backend Model Endpoint
 BACKEND_MODEL_URL = "https://medical-project-api.onrender.com/predict"
 
 
 # ----------------------------------------
-# 📡 DATADOG Metric Sender
+# 📡 Datadog Metric Sender
 # ----------------------------------------
 def dd_metric(name, value=1, metric_type="count"):
     if not all([DATADOG_API_KEY, DATADOG_APP_KEY]):
         print("⚠️ Datadog disabled: missing keys")
         return
-    
+
     try:
         url = f"https://api.{DD_SITE}/api/v1/series?api_key={DATADOG_API_KEY}&application_key={DATADOG_APP_KEY}"
         payload = {
@@ -63,15 +63,15 @@ def dd_metric(name, value=1, metric_type="count"):
 
 
 # ----------------------------------------
-# JSON Extraction
+# 🧹 JSON Extraction
 # ----------------------------------------
 def extract_json(text):
     match = re.search(r"\{[\s\S]*\}", text)
-    return json.loads(match.group()) if match else {"error":"No JSON returned"}
+    return json.loads(match.group()) if match else {"error": "No JSON returned"}
 
 
 # ----------------------------------------
-# 🩺 Medical Report Generation (Groq)
+# 🩺 Medical Report (Groq)
 # ----------------------------------------
 def generate_llm_report(prediction, confidence):
     confidence_score = f"{confidence * 100:.2f}%"
@@ -114,34 +114,33 @@ def gemini_summary(report):
     try:
         result = gemini_model.generate_content("Make patient-friendly: " + json.dumps(report))
         return result.text
-    except:
+    except Exception:
         dd_metric("medical_ai.gemini.error")
         return "⚠️ Gemini unavailable."
 
 
 # ----------------------------------------
-# 🎙️ ElevenLabs Voice (Alice ID - FIXED)
+# 🎙️ ElevenLabs Audio (Alice Voice - Final Fix)
 # ----------------------------------------
 def generate_voice(report):
     try:
         text = (
             f"Detected condition: {report['disease']}. "
             f"Confidence score: {report['confidence_score']}. "
-            f"{report.get('patient_friendly_summary','')}"
+            f"{report.get('patient_friendly_summary', '')}"
         )
 
-        # NEW SDK METHOD
         audio = ELEVEN_CLIENT.text_to_speech.convert(
+            voice_id=ALICE_VOICE_ID,
+            model_id="eleven_multilingual_v2",
             text=text,
-            voice_id=ALICE_VOICE_ID,              # <<--- Alice's ID
-            model_id="eleven_multilingual_v2"
+            output_format="mp3"   # 🚀 Prevents streaming crash on Railway
         )
 
         with open("doctor_report.mp3", "wb") as f:
-            for chunk in audio:
-                f.write(chunk)
+            f.write(audio)  # 🎯 Correct binary write (no chunk/stream issue)
 
-        print("🎤 Voice generated with Alice (ID matched)")
+        print("🎤 Voice generated successfully using Alice")
         return "doctor_report.mp3"
 
     except Exception as e:
