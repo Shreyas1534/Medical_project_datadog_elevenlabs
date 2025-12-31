@@ -4,7 +4,7 @@ import requests, json, os, re, time
 from groq import Groq
 from dotenv import load_dotenv
 import google.generativeai as genai
-from elevenlabs import generate, set_api_key
+from elevenlabs import ElevenLabs  # UPDATED SDK
 
 # ----------------------------------------
 # Load Environment Variables
@@ -20,9 +20,9 @@ DATADOG_API_KEY = os.getenv("DATADOG_API_KEY")
 DATADOG_APP_KEY = os.getenv("DATADOG_APP_KEY")
 DD_SITE = os.getenv("DD_SITE", "us5.datadoghq.com")
 
-# ElevenLabs Setup
-if ELEVENLABS_API_KEY:
-    set_api_key(ELEVENLABS_API_KEY)
+# Initialize ElevenLabs Client (NEW METHOD)
+ELEVEN_CLIENT = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+ALICE_VOICE_ID = "Xb7hH8MSUJpSbSDYk0k2"  # <<--- Alice ID
 
 # Groq Client
 client = Groq(api_key=GROQ_API_KEY)
@@ -34,12 +34,12 @@ gemini_model = genai.GenerativeModel(
     generation_config={"temperature": 0.2, "max_output_tokens": 200}
 )
 
-# Backend Model Prediction URL
+# Backend ML Model Endpoint
 BACKEND_MODEL_URL = "https://medical-project-api.onrender.com/predict"
 
 
 # ----------------------------------------
-# 📡 DATADOG Metric Sender (RESTORED)
+# 📡 DATADOG Metric Sender
 # ----------------------------------------
 def dd_metric(name, value=1, metric_type="count"):
     if not all([DATADOG_API_KEY, DATADOG_APP_KEY]):
@@ -53,19 +53,17 @@ def dd_metric(name, value=1, metric_type="count"):
                 "metric": name,
                 "type": metric_type,
                 "points": [[int(time.time()), value]],
-                "tags": ["env:prod", "service:medical_ai", "device:api", "runtime:fastapi"]
+                "tags": ["env:prod", "service:medical_ai", "runtime:fastapi"]
             }]
         }
         r = requests.post(url, json=payload)
         print(f"📡 Sent -> {name} | Status: {r.status_code}")
-        if r.status_code not in (200, 202):
-            print("⚠️ Datadog Error:", r.text)
     except Exception as e:
         print("🚨 Metric Send Failed:", e)
 
 
 # ----------------------------------------
-# JSON Extraction Helper
+# JSON Extraction
 # ----------------------------------------
 def extract_json(text):
     match = re.search(r"\{[\s\S]*\}", text)
@@ -73,7 +71,7 @@ def extract_json(text):
 
 
 # ----------------------------------------
-# 🩺 Generate Medical Report (Groq)
+# 🩺 Medical Report Generation (Groq)
 # ----------------------------------------
 def generate_llm_report(prediction, confidence):
     confidence_score = f"{confidence * 100:.2f}%"
@@ -110,7 +108,7 @@ def generate_llm_report(prediction, confidence):
 
 
 # ----------------------------------------
-# 🧠 Gemini Patient Friendly Summary
+# 🧠 Gemini Summary
 # ----------------------------------------
 def gemini_summary(report):
     try:
@@ -122,7 +120,7 @@ def gemini_summary(report):
 
 
 # ----------------------------------------
-# 🎙️ ElevenLabs Voice Report Generation (FIXED - SINGLE VOICE)
+# 🎙️ ElevenLabs Voice (Alice ID - FIXED)
 # ----------------------------------------
 def generate_voice(report):
     try:
@@ -132,17 +130,18 @@ def generate_voice(report):
             f"{report.get('patient_friendly_summary','')}"
         )
 
-        # 🔥 Using ONLY "Alice" (confirmed available)
-        audio = generate(
+        # NEW SDK METHOD
+        audio = ELEVEN_CLIENT.text_to_speech.convert(
             text=text,
-            voice="Alice",
-            model="eleven_multilingual_v2"
+            voice_id=ALICE_VOICE_ID,              # <<--- Alice's ID
+            model_id="eleven_multilingual_v2"
         )
 
         with open("doctor_report.mp3", "wb") as f:
-            f.write(audio)
+            for chunk in audio:
+                f.write(chunk)
 
-        print("🎤 Voice generated using: Alice")
+        print("🎤 Voice generated with Alice (ID matched)")
         return "doctor_report.mp3"
 
     except Exception as e:
@@ -152,7 +151,7 @@ def generate_voice(report):
 
 
 # ----------------------------------------
-# 🚑 MAIN DIAGNOSIS ROUTE
+# 🚑 MAIN ROUTE
 # ----------------------------------------
 @app.post("/diagnose")
 async def diagnose(file: UploadFile = File(...)):
@@ -188,7 +187,7 @@ async def diagnose(file: UploadFile = File(...)):
 
 
 # ----------------------------------------
-# 🔊 Voice Report Download
+# 🔊 AUDIO DOWNLOAD ROUTE
 # ----------------------------------------
 @app.get("/voice-report")
 def voice_report():
