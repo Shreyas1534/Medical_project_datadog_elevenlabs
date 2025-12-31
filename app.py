@@ -4,7 +4,7 @@ import requests, json, os, re, time
 from groq import Groq
 from dotenv import load_dotenv
 import google.generativeai as genai
-from elevenlabs.client import ElevenLabs   # ✅ Correct import for your version
+from elevenlabs import TextToSpeechClient   # ✅ Correct import
 
 # ----------------------------------------
 # Load Environment Variables
@@ -20,32 +20,29 @@ DATADOG_API_KEY = os.getenv("DATADOG_API_KEY")
 DATADOG_APP_KEY = os.getenv("DATADOG_APP_KEY")
 DD_SITE = os.getenv("DD_SITE", "us5.datadoghq.com")
 
-# Initialize ElevenLabs Client
-ELEVEN_CLIENT = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-ALICE_VOICE_ID = "Xb7hH8MSUJpSbSDYk0k2"  # 🎙️ Confirmed working voice ID
+# ElevenLabs Client
+ELEVEN_CLIENT = TextToSpeechClient(api_key=ELEVENLABS_API_KEY)
+ALICE_VOICE_ID = "Xb7hH8MSUJpSbSDYk0k2"  # 🎙️ Your working voice ID
 
 # Groq Client
 client = Groq(api_key=GROQ_API_KEY)
 
-# Gemini Setup
+# Gemini Client
 genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel(
     model_name="gemini-1.5-flash",
     generation_config={"temperature": 0.2, "max_output_tokens": 200}
 )
 
-# Backend Model Endpoint
+# Prediction Backend
 BACKEND_MODEL_URL = "https://medical-project-api.onrender.com/predict"
-
 
 # ----------------------------------------
 # 📡 Datadog Metric Sender
 # ----------------------------------------
 def dd_metric(name, value=1, metric_type="count"):
     if not all([DATADOG_API_KEY, DATADOG_APP_KEY]):
-        print("⚠️ Datadog disabled: missing keys")
         return
-
     try:
         url = f"https://api.{DD_SITE}/api/v1/series?api_key={DATADOG_API_KEY}&application_key={DATADOG_APP_KEY}"
         payload = {
@@ -53,110 +50,93 @@ def dd_metric(name, value=1, metric_type="count"):
                 "metric": name,
                 "type": metric_type,
                 "points": [[int(time.time()), value]],
-                "tags": ["env:prod", "service:medical_ai", "runtime:fastapi"]
+                "tags": ["env:prod", "service:medical_ai"]
             }]
         }
-        r = requests.post(url, json=payload)
-        print(f"📡 Sent -> {name} | Status: {r.status_code}")
-    except Exception as e:
-        print("🚨 Metric Send Failed:", e)
-
+        requests.post(url, json=payload)
+    except:
+        pass
 
 # ----------------------------------------
-# 🧹 JSON Extraction
+# JSON Extractor
 # ----------------------------------------
 def extract_json(text):
     match = re.search(r"\{[\s\S]*\}", text)
-    return json.loads(match.group()) if match else {"error": "No JSON returned"}
-
+    return json.loads(match.group()) if match else {"error":"No JSON returned"}
 
 # ----------------------------------------
-# 🩺 Medical Report (Groq)
+# 🩺 GROQ Medical Report
 # ----------------------------------------
 def generate_llm_report(prediction, confidence):
     confidence_score = f"{confidence * 100:.2f}%"
-
     prompt = f"""
-    You are a licensed medical diagnostic AI. Provide a structured medical report.
-
-    Detected condition: {prediction}
-    Confidence: {confidence_score}
-
-    Return JSON ONLY:
+    You are a licensed medical diagnostic AI. Return JSON ONLY:
     {{
       "disease": "{prediction}",
       "confidence_score": "{confidence_score}",
       "severity_assessment": "Low/Moderate/High",
       "detailed_explanation": "3-6 sentence medical explanation.",
-      "possible_symptoms": ["symptom1", "symptom2", "symptom3"],
+      "possible_symptoms": ["symptom1","symptom2","symptom3"],
       "clinical_significance": "Why it matters medically.",
-      "recommended_next_steps": ["test1", "treatment1", "doctor visit"],
+      "recommended_next_steps": ["test","treatment","doctor visit"],
       "specialist_to_consult": "Correct doctor type",
-      "emergency_signs": ["danger sign 1", "danger sign 2"],
-      "patient_friendly_summary": "Easily understandable version for a patient.",
-      "disclaimer": "AI-based assistance, not a confirmed diagnosis."
+      "emergency_signs": ["danger sign 1","danger sign 2"],
+      "patient_friendly_summary": "Simple explanation for patients.",
+      "disclaimer": "AI assistance, not a confirmed diagnosis."
     }}
     """
 
-    response = client.chat.completions.create(
+    res = client.chat.completions.create(
         model="llama-3.1-8b-instant",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.4
+        messages=[{"role": "user","content": prompt}],
+        temperature=0.3
     )
-
-    return extract_json(response.choices[0].message.content)
-
+    return extract_json(res.choices[0].message.content)
 
 # ----------------------------------------
-# 🧠 Gemini Summary
+# 🧠 GEMINI SUMMARY
 # ----------------------------------------
 def gemini_summary(report):
     try:
-        result = gemini_model.generate_content("Make patient-friendly: " + json.dumps(report))
-        return result.text
-    except Exception:
-        dd_metric("medical_ai.gemini.error")
+        return gemini_model.generate_content("Simplify: " + json.dumps(report)).text
+    except:
+        dd_metric("gemini.error")
         return "⚠️ Gemini unavailable."
 
-
 # ----------------------------------------
-# 🎙️ ElevenLabs Audio (Alice Voice - Final Fix)
+# 🎙️ ALICE TTS (FINAL WORKING VERSION)
 # ----------------------------------------
 def generate_voice(report):
     try:
         text = (
-            f"Detected condition: {report['disease']}. "
-            f"Confidence score: {report['confidence_score']}. "
-            f"{report.get('patient_friendly_summary', '')}"
+            f"{report['disease']} detected with confidence {report['confidence_score']}. "
+            f"{report.get('patient_friendly_summary','')}"
         )
 
-        audio = ELEVEN_CLIENT.text_to_speech.convert(
+        audio = ELEVEN_CLIENT.text_to_speech(
             voice_id=ALICE_VOICE_ID,
-            model_id="eleven_multilingual_v2",
             text=text,
-            output_format="mp3"   # 🚀 Prevents streaming crash on Railway
+            model_id="eleven_multilingual_v2",
+            output_format="mp3"   # 🚀 Binary audio for Railway
         )
 
-        with open("doctor_report.mp3", "wb") as f:
-            f.write(audio)  # 🎯 Correct binary write (no chunk/stream issue)
+        with open("doctor_report.mp3","wb") as f:
+            f.write(audio)  # 🚀 No streaming, no crash
 
-        print("🎤 Voice generated successfully using Alice")
         return "doctor_report.mp3"
 
     except Exception as e:
-        dd_metric("medical_ai.voice.error")
-        print("🚨 ElevenLabs Voice Error:", e)
+        dd_metric("voice.error")
+        print("🚨 ElevenLabs Error:", e)
         return None
-
 
 # ----------------------------------------
 # 🚑 MAIN ROUTE
 # ----------------------------------------
 @app.post("/diagnose")
 async def diagnose(file: UploadFile = File(...)):
-    dd_metric("medical_ai.request")
+    dd_metric("request")
     start = time.time()
-
     try:
         r = requests.post(BACKEND_MODEL_URL, files={"file": file.file})
         data = r.json()
@@ -164,13 +144,11 @@ async def diagnose(file: UploadFile = File(...)):
         prediction = data.get("prediction")
         confidence = float(data.get("confidence", 0))
 
-        dd_metric("medical_ai.confidence", confidence, "gauge")
-
         report = generate_llm_report(prediction, confidence)
         summary = gemini_summary(report)
         generate_voice(report)
 
-        dd_metric("medical_ai.latency", (time.time() - start) * 1000, "gauge")
+        dd_metric("latency",(time.time()-start)*1000,"gauge")
 
         return {
             "prediction": prediction,
@@ -181,15 +159,14 @@ async def diagnose(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        dd_metric("medical_ai.error")
+        dd_metric("error")
         raise HTTPException(500, f"SERVER ERROR: {str(e)}")
 
-
 # ----------------------------------------
-# 🔊 AUDIO DOWNLOAD ROUTE
+# 🔊 AUDIO DOWNLOAD
 # ----------------------------------------
 @app.get("/voice-report")
 def voice_report():
     if not os.path.exists("doctor_report.mp3"):
-        raise HTTPException(404, "No voice report generated yet")
+        raise HTTPException(404,"No audio generated")
     return FileResponse("doctor_report.mp3", media_type="audio/mpeg")
