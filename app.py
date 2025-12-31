@@ -4,7 +4,7 @@ import requests, json, os, re, time
 from groq import Groq
 from dotenv import load_dotenv
 import google.generativeai as genai
-from elevenlabs import generate, set_api_key   # ✅ Legacy SDK import (works on Railway)
+from elevenlabs import generate, set_api_key   # 🟢 legacy SDK - works on Railway
 
 # ----------------------------------------
 # Load Environment Variables
@@ -20,9 +20,9 @@ DATADOG_API_KEY = os.getenv("DATADOG_API_KEY")
 DATADOG_APP_KEY = os.getenv("DATADOG_APP_KEY")
 DD_SITE = os.getenv("DD_SITE", "us5.datadoghq.com")
 
-# ElevenLabs Init (Legacy Method)
+# ElevenLabs Init
 set_api_key(ELEVENLABS_API_KEY)
-ALICE_VOICE = "Alice"  # 🎙️ Voice name that exists in your account
+ALICE_VOICE = "Alice"  # 🎙 confirmed voice name
 
 # Groq Client
 client = Groq(api_key=GROQ_API_KEY)
@@ -34,31 +34,38 @@ gemini_model = genai.GenerativeModel(
     generation_config={"temperature": 0.2, "max_output_tokens": 200}
 )
 
-# Backend Prediction URL
+# Model Backend
 BACKEND_MODEL_URL = "https://medical-project-api.onrender.com/predict"
 
 
 # ----------------------------------------
-# 📡 Datadog Metric
+# 📡 Datadog Metric (Auto-prefix + stable)
 # ----------------------------------------
 def dd_metric(name, value=1, metric_type="count"):
     if not DATADOG_API_KEY or not DATADOG_APP_KEY:
+        print("⚠️ Datadog disabled (missing keys)")
         return
     try:
+        # auto prefix to fix dashboard issue
+        metric_name = f"medical_ai.{name}" if not name.startswith("medical_ai.") else name
+
         url = f"https://api.{DD_SITE}/api/v1/series?api_key={DATADOG_API_KEY}&application_key={DATADOG_APP_KEY}"
-        payload = {"series": [{
-            "metric": name,
-            "type": metric_type,
-            "points": [[int(time.time()), value]],
-            "tags": ["env:prod","service:medical_ai"]
-        }]}
+        payload = {
+            "series": [{
+                "metric": metric_name,
+                "type": metric_type,
+                "points": [[int(time.time()), value]],
+                "tags": ["env:prod", "service:medical_ai", "runtime:fastapi"]
+            }]
+        }
         requests.post(url, json=payload)
-    except:
-        pass
+        print(f"📡 Sent -> {metric_name}")
+    except Exception as e:
+        print("🚨 Datadog Send Failed:", e)
 
 
 # ----------------------------------------
-# 🧹 JSON Extractor
+# JSON Extractor
 # ----------------------------------------
 def extract_json(text):
     match = re.search(r"\{[\s\S]*\}", text)
@@ -70,7 +77,6 @@ def extract_json(text):
 # ----------------------------------------
 def generate_llm_report(prediction, confidence):
     score = f"{confidence * 100:.2f}%"
-
     prompt = f"""
     You are a medical diagnostic AI. Return JSON only:
     {{
@@ -87,13 +93,11 @@ def generate_llm_report(prediction, confidence):
       "disclaimer": "AI assistance, not a confirmed diagnosis."
     }}
     """
-
     res = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3
     )
-
     return extract_json(res.choices[0].message.content)
 
 
@@ -102,15 +106,16 @@ def generate_llm_report(prediction, confidence):
 # ----------------------------------------
 def gemini_summary(report):
     try:
+        dd_metric("gemini.request")
         out = gemini_model.generate_content("Simplify for patient: " + json.dumps(report))
         return out.text
-    except:
+    except Exception as e:
         dd_metric("gemini.error")
-        return "⚠️ Gemini unavailable."
+        return f"⚠️ Gemini failed: {e}"
 
 
 # ----------------------------------------
-# 🎙️ Alice Voice (Legacy Working Version)
+# 🎙️ Voice (Alice) - Legacy Working Version
 # ----------------------------------------
 def generate_voice(report):
     try:
@@ -121,13 +126,14 @@ def generate_voice(report):
 
         audio = generate(
             text=text,
-            voice=ALICE_VOICE,               # 🔥 Works on your account
-            model="eleven_multilingual_v2"   # 🎯 Correct model
+            voice=ALICE_VOICE,
+            model="eleven_multilingual_v2"
         )
 
         with open("doctor_report.mp3", "wb") as f:
             f.write(audio)
 
+        dd_metric("voice.success")
         return "doctor_report.mp3"
 
     except Exception as e:
@@ -137,13 +143,24 @@ def generate_voice(report):
 
 
 # ----------------------------------------
-# 🚑 Main Diagnosis Route
+# 🌍 Root Health Check
+# ----------------------------------------
+@app.get("/")
+def home():
+    return {
+        "status": "running",
+        "service": "Medical AI",
+        "routes": ["/diagnose", "/voice-report"]
+    }
+
+
+# ----------------------------------------
+# 🚑 Diagnose Route
 # ----------------------------------------
 @app.post("/diagnose")
 async def diagnose(file: UploadFile = File(...)):
     dd_metric("request")
     start = time.time()
-
     try:
         res = requests.post(BACKEND_MODEL_URL, files={"file": file.file})
         data = res.json()
@@ -171,7 +188,7 @@ async def diagnose(file: UploadFile = File(...)):
 
 
 # ----------------------------------------
-# 🔊 Voice Output
+# 🔊 Voice File
 # ----------------------------------------
 @app.get("/voice-report")
 def voice_report():
